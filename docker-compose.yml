@@ -1,0 +1,26 @@
+services:
+  plate-classifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: plate-classifier:latest
+    runtime: nvidia  # Solo necesario para GPU
+    environment:
+      - KAGGLE_USERNAME=${KAGGLE_USERNAME}
+      - KAGGLE_KEY=${KAGGLE_KEY}
+      - OPENCV_VIDEOIO_PRIORITY_MSMF=0 
+    volumes:
+      - ./output:/app/output
+      - ./data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: ./download_data.sh
+
+volumes:
+  data:
+  output:
