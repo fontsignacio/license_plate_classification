@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Configurar API Key de Kaggle
+echo "Verificando credenciales de Kaggle..."
 if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
     echo "Error: Kaggle credentials not found in environment variables"
     exit 1
@@ -10,99 +11,77 @@ mkdir -p /root/.kaggle
 echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > /root/.kaggle/kaggle.json
 chmod 600 /root/.kaggle/kaggle.json
 
-# Descargar dataset
-echo "Descargando dataset..."
-kaggle datasets download -d abtexp/synthetic-indian-license-plates -p ./data
-unzip -q ./data/synthetic-indian-license-plates.zip -d ./data/license_plates
+# 1. Descargar y descomprimir solo si no existe
+if [ ! -d ./data/license_plates/generated ]; then
+  kaggle datasets download -d abtexp/synthetic-indian-license-plates -p ./data
+  unzip -oq ./data/synthetic-indian-license-plates.zip -d ./data/license_plates
+else
+  echo "El dataset ya está descomprimido en ./data/license_plates/generated, omitiendo descarga."
+fi
 
-# Preparar estructura de directorios
-echo "Preparando estructura de directorios..."
-mkdir -p ./data/dataset/train/license_plate
-mkdir -p ./data/dataset/train/background
-mkdir -p ./data/dataset/val/license_plate
-mkdir -p ./data/dataset/val/background
-mkdir -p ./data/dataset/test/license_plate
-mkdir -p ./data/dataset/test/background
+# 2. Definir las clases reales del dataset
+CLASSES=(commercial commercial_electrical private private_electrical rentable)
 
-# Contadores
-total_plates=0
-total_background=0
+# 3. Crear carpetas globales por clase
+for split in train val test; do
+  for class in "${CLASSES[@]}"; do
+    mkdir -p ./data/dataset/$split/$class
+  done
+done
 
-# Función para mover archivos con manejo de espacios
-move_files() {
-    local src_dir="$1"
-    local dest_dir="$2"
-    
-    find "$src_dir" -type f -name "*.png" -print0 | while IFS= read -r -d $'\0' file; do
-        if [[ "$file" == *"license_plate"* ]] || [[ "$file" == *"generated"* ]]; then
-            ((total_plates++))
-            dest="./data/dataset"
-            if ((total_plates % 10 < 8)); then
-                dest+="/train/license_plate"
-            elif ((total_plates % 10 < 9)); then
-                dest+="/val/license_plate"
-            else
-                dest+="/test/license_plate"
-            fi
-        else
-            ((total_background++))
-            dest="./data/dataset"
-            if ((total_background % 10 < 8)); then
-                dest+="/train/background"
-            elif ((total_background % 10 < 9)); then
-                dest+="/val/background"
-            else
-                dest+="/test/background"
-            fi
-        fi
-        
-        # Mover preservando nombre y directorios
-        mv "$file" "$dest/$(basename "$file")"
+# Limpiar archivos temporales previos
+for class in "${CLASSES[@]}"; do
+  rm -f "./data/all_${class}_images.txt"
+done
+
+# Recorrer estados y tipos, copiar imágenes a carpeta global por clase
+for state_dir in ./data/license_plates/generated/*; do
+  [ -d "$state_dir" ] || continue
+  for class in "${CLASSES[@]}"; do
+    src_dir="$state_dir/$class"
+    [ -d "$src_dir" ] || continue
+    for img in "$src_dir"/*.png; do
+      [ -e "$img" ] || continue  # Solo si existe al menos una imagen
+      echo "$img" >> "./data/all_${class}_images.txt"
     done
-}
-
-# Procesar todas las imágenes
-echo "Procesando imágenes de matrículas y fondos..."
-find "./data/license_plates/generated" -type f -name "*.png" -print0 | while IFS= read -r -d $'\0' file; do
-    ((total_plates++))
-    dest="./data/dataset"
-    if ((total_plates % 10 < 8)); then
-        dest+="/train/license_plate"
-    elif ((total_plates % 10 < 9)); then
-        dest+="/val/license_plate"
-    else
-        dest+="/test/license_plate"
-    fi
-    mv "$file" "$dest/$(basename "$file")"
+  done
 done
 
-find "./data/license_plates/background" -type f -name "*.png" -print0 | while IFS= read -r -d $'\0' file; do
-    ((total_background++))
-    dest="./data/dataset"
-    if ((total_background % 10 < 8)); then
-        dest+="/train/background"
-    elif ((total_background % 10 < 9)); then
-        dest+="/val/background"
+# 4. Split estratificado por clase
+for class in "${CLASSES[@]}"; do
+  if [ ! -f "./data/all_${class}_images.txt" ]; then
+    echo "No hay imágenes para la clase $class"
+    continue
+  fi
+  shuf "./data/all_${class}_images.txt" > "./data/shuf_${class}.txt"
+  total=$(wc -l < "./data/shuf_${class}.txt")
+  if [ "$total" -eq 0 ]; then
+    echo "No hay imágenes para la clase $class"
+    continue
+  fi
+  train_count=$((total * 80 / 100))
+  val_count=$((total * 10 / 100))
+  test_count=$((total - train_count - val_count))
+  n=0
+  while read img; do
+    if [ $n -lt $train_count ]; then
+      cp "$img" "./data/dataset/train/$class/"
+    elif [ $n -lt $((train_count + val_count)) ]; then
+      cp "$img" "./data/dataset/val/$class/"
     else
-        dest+="/test/background"
+      cp "$img" "./data/dataset/test/$class/"
     fi
-    mv "$file" "$dest/$(basename "$file")"
+    n=$((n+1))
+  done < "./data/shuf_${class}.txt"
 done
 
-# Verificar resultados
-count_train_plates=$(find ./data/dataset/train/license_plate -type f | wc -l)
-count_train_background=$(find ./data/dataset/train/background -type f | wc -l)
-count_val_plates=$(find ./data/dataset/val/license_plate -type f | wc -l)
-count_val_background=$(find ./data/dataset/val/background -type f | wc -l)
-count_test_plates=$(find ./data/dataset/test/license_plate -type f | wc -l)
-count_test_background=$(find ./data/dataset/test/background -type f | wc -l)
+# 5. Resumen
+for split in train val test; do
+  for class in "${CLASSES[@]}"; do
+    count=$(ls ./data/dataset/$split/$class | wc -l)
+    echo "$split/$class: $count"
+  done
+done
 
-echo "Dataset preparado:"
-echo "  Total placas: $total_plates"
-echo "  Total fondos: $total_background"
-echo "  Train: $count_train_plates placas, $count_train_background fondos"
-echo "  Val:   $count_val_plates placas, $count_val_background fondos"
-echo "  Test:  $count_test_plates placas, $count_test_background fondos"
-
-# Ejecutar script de entrenamiento
+# 6. Ejecutar entrenamiento
 python train.py
