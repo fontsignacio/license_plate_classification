@@ -12,9 +12,9 @@ from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 
 # Configuración
-IMG_SIZE = (128, 128)
-BATCH_SIZE = 16
-EPOCHS = 5
+IMG_SIZE = (224, 224)
+BATCH_SIZE = 64
+EPOCHS = 10
 
 # Rutas de datos
 base_dir = 'data/dataset'
@@ -101,8 +101,8 @@ resnet_model = build_model(ResNet50(weights='imagenet', include_top=False, input
 
 # Callbacks
 callbacks = [
-    EarlyStopping(patience=2, restore_best_weights=True, verbose=1),
-    ReduceLROnPlateau(factor=0.2, patience=1, verbose=1),
+    EarlyStopping(patience=4, restore_best_weights=True, verbose=1),
+    ReduceLROnPlateau(factor=0.2, patience=2, verbose=1),
     ModelCheckpoint('output/best_vgg.h5', save_best_only=True, monitor='val_accuracy'),
     ModelCheckpoint('output/best_resnet.h5', save_best_only=True, monitor='val_accuracy')
 ]
@@ -128,7 +128,7 @@ resnet_history = resnet_model.fit(
 
 # Fine-tuning (opcional)
 print("\nFine-tuning VGG16...")
-for layer in vgg_model.layers[1].layers[-4:]:
+for layer in vgg_model.layers[1].layers[-10:]:
     layer.trainable = True
 vgg_model.compile(optimizer=Adam(1e-5), loss='categorical_crossentropy', metrics=['accuracy'])
 vgg_model.fit(
@@ -139,9 +139,9 @@ vgg_model.fit(
 )
 
 print("\nFine-tuning ResNet50...")
-for layer in resnet_model.layers[1].layers[-10:]:
+for layer in resnet_model.layers[1].layers[-50:]:
     layer.trainable = True
-resnet_model.compile(optimizer=Adam(1e-5), loss='categorical_crossentropy', metrics=['accuracy'])
+resnet_model.compile(optimizer=Adam(1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
 resnet_model.fit(
     train_generator,
     epochs=3,
