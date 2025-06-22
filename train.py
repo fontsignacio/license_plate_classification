@@ -122,13 +122,21 @@ test_generator_mobilenet = val_test_datagen.flow_from_directory(
 )
 
 # Calcular class_weight
-class_weights_array = compute_class_weight(
+class_weights_array_vgg = compute_class_weight(
     class_weight='balanced',
-    classes=np.unique(train_generator.classes),
-    y=train_generator.classes
+    classes=np.unique(train_generator_vgg.classes),
+    y=train_generator_vgg.classes
 )
-class_weights = dict(enumerate(class_weights_array))
-print("Pesos por clase:", class_weights)
+class_weights_array_mobilenet = compute_class_weight(
+    class_weight='balanced',
+    classes=np.unique(train_generator_mobilenet.classes),
+    y=train_generator_mobilenet.classes
+)
+
+class_weights_vgg = dict(enumerate(class_weights_array_vgg))
+class_weights_mobilenet = dict(enumerate(class_weights_array_mobilenet))
+print("Pesos por clase:", class_weights_vgg)
+print("Pesos por clase:", class_weights_mobilenet)
 
 # Construcción del modelo
 def build_model_vgg(base_model, model_name):
@@ -187,7 +195,7 @@ vgg_history = vgg_model.fit(
     epochs=EPOCHS,
     validation_data=val_generator_vgg,
     callbacks=callbacks_vgg,
-    class_weight=class_weights,
+    class_weight=class_weights_vgg,
     verbose=1
 )
 
@@ -197,7 +205,7 @@ mobilenet_history = mobilenet_model.fit(
     epochs=EPOCHS,
     validation_data=val_generator_mobilenet,
     callbacks=callbacks_mobilenet,
-    class_weight=class_weights,
+    class_weight=class_weights_mobilenet,
     verbose=1
 )
 
