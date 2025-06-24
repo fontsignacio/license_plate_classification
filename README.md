@@ -1,7 +1,7 @@
 # License Plate Classification
 
 ## Descripción
-Este proyecto implementa un clasificador de imágenes basado en deep learning para detectar matrículas vehiculares (license plates) en imágenes. Utiliza modelos preentrenados (VGG16 y ResNet50) y se entrena sobre un dataset sintético de matrículas indias descargado automáticamente desde Kaggle.
+Este proyecto implementa un clasificador de imágenes basado en deep learning para detectar matrículas vehiculares (license plates) en imágenes. Utiliza modelos preentrenados (VGG16 y MobileNetV2) y se entrena sobre un dataset sintético de matrículas indias descargado automáticamente desde Kaggle.
 
 El flujo principal descarga los datos, prepara la estructura de carpetas, entrena los modelos y guarda los resultados y métricas en la carpeta `output/`.
 
